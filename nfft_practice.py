@@ -17,13 +17,27 @@ def make_time(start, stop, num, sigma):
             t[i] += np.random.normal(0,sigma)
     return t
 
+def get_powers(times, vals):
+    N = len(times)
+    T = times[-1]
+    print("Will return {}-frequencies, spaced at {} Hz".format(N, (1/T)))
+    freqs = np.arange(N)*(1/T)
+    powers = np.zeros(N)
+    for m in range(len(powers)):
+        summed = 0
+        for n in range(N):
+            summed += vals[n]*np.exp(-2j*np.pi*m/T*times[n])
+        powers[m] = summed
+    return freqs, (powers)**2
+
+
 N = 50
 freq = 4.5
 start_t = 0
 stop_t = 3
-num_points = 30
-sigma = 3
-x = make_time(start_t, stop_t, N, sigma)
+num_points = 40
+sigma = (stop_t/num_points)*0.5
+x = make_time(start_t, stop_t, num_points, sigma)
 x0 = np.linspace(start_t, stop_t,800)
 f = np.sin(2*np.pi*freq*x)
 f0 = np.sin(2*np.pi*freq*x0)
@@ -34,6 +48,13 @@ plt.grid()
 plt.legend(loc='lower right')
 plt.xlabel("Time, seconds")
 plt.title("Data Points")
+plt.show()
+
+f_try, p_try = get_powers(x, f)
+plt.plot(f_try, p_try, marker='.')
+plt.grid()
+plt.xlabel("Time, seconds")
+plt.title("Attempted Manual ndft")
 plt.show()
 
 k = np.arange(-N//2, N//2)
