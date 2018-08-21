@@ -8,6 +8,7 @@ Created on Wed Aug 15 15:25:23 2018
 import numpy as np
 from scipy.fftpack import dct, idct
 import pylab as plt
+import math
 
 
 class Drift(object):
@@ -67,19 +68,39 @@ class Drift(object):
         input_array= (x - nCounts*null_hypothesis)/np.sqrt(nCounts*null_hypothesis * (1 - null_hypothesis))
         return dct(input_array, norm='ortho')
     
-    def _manual_ndft(self):
+    def _manual_ndft(self, print_details=False):
         times = self.times
         vals = self.data
         N = len(times)
         T = times[-1]
-        print("Will return {}-frequencies, spaced at {} Hz".format(N, (1/T)))
-        self.frequencies = np.arange(N)*(1/T)
-        for m in range(len(self.frequencies)):
+        if print_details: print("Will return {}-frequencies (N/2), spaced at {} Hz".format(math.ceil(N/2), (1/T)))
+        frequencies = np.arange(N)*(1/T)
+        modes = np.zeros(N)
+        for m in range(len(frequencies)):
             summed = 0
             for n in range(N):
                 summed += vals[n]*np.exp(-2j*np.pi*m/T*times[n])
-            self.modes[m] = summed.real
-        self.powers = self.modes**2
+            modes[m] = summed.real
+        #since the ndft covers -N/2 to N/2 (not 0 -> N) integer multiples of 1/T for frequency,
+        #this is because of the Nyquist theorem. Although the timestep may not be
+        # perfectly defined, and therefore the sample rate varies, calculating an
+        #average sample rate will only give you half the frequencies.
+        #The frequencies should be symmetric about the halfway frequency, so add their
+        #powers together.
+        halfN = math.ceil(N/2)
+        new_frequencies = []
+        new_powers = []
+        for n in range(halfN):
+            new_frequencies.append(frequencies[n])
+            power = (modes[n])**2 + (modes[len(modes) - 1 - n])**2 #sum the first and last powers, then the second & second to last..etc.
+            #power = modes[n]**2 #this is what it would be if you didn't add the reflection, and just truncated at N/2
+            new_powers.append(power)
+        self.frequencies = new_frequencies
+        self.powers = new_powers
+        if print_details: 
+            print("Average timestep is {:.4f} s".format(self.avg_timestep))
+            print("Average sample rate is {:.3f} Hz".format(1/self.avg_timestep))
+            print("Max frequency (under Nyquist limit) is {:.3} Hz".format(self.frequencies[-1]))
         return self.frequencies, self.powers
     
     def plot_input(self):
