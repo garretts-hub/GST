@@ -100,7 +100,7 @@ class Drift(object):
         if print_details: 
             print("Average timestep is {:.4f} s".format(self.avg_timestep))
             print("Average sample rate is {:.3f} Hz".format(1/self.avg_timestep))
-            print("Max frequency (under Nyquist limit) is {:.3} Hz".format(self.frequencies[-1]))
+            print("Max frequency (under Nyquist limit) is {:.3f} Hz".format(self.frequencies[-1]))
         return self.frequencies, self.powers
     
     def plot_input(self):

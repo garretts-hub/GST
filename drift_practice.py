@@ -19,11 +19,11 @@ def make_time(start, stop, num, sigma):
             t[i] += np.random.normal(0,sigma)
     return t
 
-freq = 4
+freq = 1
 start_t = 0
-stop_t = 5
-num_points = 1001
-sigma = (stop_t/num_points)*0.0
+stop_t = 2
+num_points = 100
+sigma = (stop_t/num_points)*0.2
 x = make_time(start_t, stop_t, num_points, sigma)
 f = np.sin(2*np.pi*freq*x)
 x0 = np.linspace(start_t, stop_t, 500)
