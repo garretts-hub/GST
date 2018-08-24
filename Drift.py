@@ -47,7 +47,7 @@ class Drift(object):
     def __repr__(self):
         return "Drift(Len={}, start_time={}s, end_time={}s, counts_per_sample={}, average_timestep={:.3}s".format(self.samples, self.times[0], self.times[-1], self.counts, self.avg_timestep)
     
-    def _dct(self, null_hypothesis=None):
+    def _dct(self, print_details=False, null_hypothesis=None):
         """    
         x : array; Data string, on which the normalization and discrete cosine transformation is performed. If
             counts is not specified, this must be a bit string.
@@ -55,6 +55,10 @@ class Drift(object):
             If not None, an array to use in the normalization before the DCT. If None, it is
             taken to be an array in which every element is the mean of x.
         """
+        delta_freq = 1/(2*self.avg_timestep*self.samples)
+        self.frequencies = np.arange(0, self.samples*delta_freq, delta_freq)
+        if print_details:
+            print("Frequency spacing is {:.4f} Hz".format(delta_freq))
         x = self.data
         nCounts = self.counts
         x_mean = np.mean(x)
@@ -66,12 +70,16 @@ class Drift(object):
             if null_hypothesis <= 0 or null_hypothesis >= 1:
                 return np.zeros(N)
         input_array= (x - nCounts*null_hypothesis)/np.sqrt(nCounts*null_hypothesis * (1 - null_hypothesis))
-        return dct(input_array, norm='ortho')
+        self.modes = dct(input_array, norm='ortho')
+        self.powers = self.modes**2
     
     def _manual_ndft(self, print_details=False):
         times = self.times
         vals = self.data
-        N = len(times)
+        nCounts = self.counts
+        N = self.samples
+        null_hypothesis = np.mean(vals)/nCounts
+        input_array= (vals - nCounts*null_hypothesis)/np.sqrt(nCounts*null_hypothesis * (1 - null_hypothesis))
         T = times[-1]
         if print_details: print("Will return {}-frequencies (N/2), spaced at {} Hz".format(math.ceil(N/2), (1/T)))
         frequencies = np.arange(N)*(1/T)
@@ -79,7 +87,7 @@ class Drift(object):
         for m in range(len(frequencies)):
             summed = 0
             for n in range(N):
-                summed += vals[n]*np.exp(-2j*np.pi*m/T*times[n])
+                summed += input_array[n]*np.exp(-2j*np.pi*m/T*times[n])
             modes[m] = summed.real
         #since the ndft covers -N/2 to N/2 (not 0 -> N) integer multiples of 1/T for frequency,
         #this is because of the Nyquist theorem. Although the timestep may not be
