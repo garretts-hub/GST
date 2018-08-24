@@ -49,110 +49,53 @@ def gate_list_to_string(gate_list):
         gate_string = gate_string + gate
     return gate_string
 
-'''a Garrett-made function. I made this just to export and make adding 1/f noise to my time-dependent data simulator a little easier'''
-def telegraph_noise(total_time, amplitude, total_fluctuators, start_f, stop_f, time_unit):
-    '''if initialization_time != 0:
-        iterations = total_time//initialization_time'''
-    signal = _ns.NoiseSignalTelegraph(initial_seed=1, time_unit=time_unit)
-    signal.configure_noise(1.0, amplitude, total_fluctuators, start_f, stop_f, total_time)
-    
-    sample_val = []
-    for ii in range(1):
-        signal.init()
-        signal.interpolation_settings(True)
-    
-        tvals = [t for t in range(total_time)]
-        for t in tvals:
-            sample_val += [signal[t]]
-        tt = tvals
+def compress_gate_list(gate_list):
+    #this will compress the gate_list down to a list of 2-element lists, where the first element is the gate
+    # and the second element is the number of consecutive appearances. The for loop below runs faster
+    # when it can read the gates this way.
+    num_gates = len(gate_list)
+    compressed_list = []
+    for i in range(num_gates):
+        if i==0:
+            compressed_list.append([gate_list[i], 1])
+        else:
+            if gate_list[i]==gate_list[i-1]:
+                compressed_list[-1][1] += 1
+            else:
+                compressed_list.append([gate_list[i], 1])
+    return compressed_list
 
-    plt.plot(tt, sample_val)
-    plt.grid()
-    plt.title("Telegraph Noise from {} to {} Hz".format(start_f, stop_f))
-    plt.xlabel("Time in time_unit integers".format(time_unit))
-    plt.show()
-    return tt, sample_val
-
-'''This simulates data based on an overrotation based on 1/f noise'''
-def create_1f_data(time_per_count, nSamples, nCounts, gate_list, amp, total_fluctuators, start_f, stop_f, time_unit, time_between_samples=0, recalibration_time=None):
-    '''To-do: make a way to recalibrate error after nCounts (i.e. each sample) even if the timebetweensamples is zero.'''
-    time_per_sample = time_per_count*nCounts
-    timestep = time_per_sample + time_between_samples
-    timestamps = np.arange(timestep, nSamples*timestep, timestep)
-    rho0 = _qt.operator_to_vector(_qt.ket2dm(_qt.basis(2,0)))
-    rho1 = _qt.operator_to_vector(_qt.ket2dm(_qt.basis(2,1)))
-    zero_counts = []
-    one_counts = []
-    probs = []
-    probs_ideal = []
-    angles = []
+def SNR(frequencies, powers, signal_frequencies, signal_bandwidth):
+    #frequencies & powers from the FT; assumes evenly-spaced frequencies
+    #signal frequencies are the frequencies you're interested in
+    #bandwidth is the amount of frequency plus/minus your signal frequencies that 
+    #   you're willing to count as part of your signal power
+    frequencies = np.asarray(frequencies)
+    powers = np.asarray(powers)
+    mean_power = np.mean(powers)
+    signals = []
+    signal_power_list = [] #includes one element for the total power for each signal frequency of interest
+    for f in signal_frequencies:
+        lower_bound = f - signal_bandwidth
+        upper_bound = f + signal_bandwidth
+        signals.append((lower_bound, upper_bound))
+    for signal in signals:
+        signal_power = 0
+        for i in range(len(frequencies)):
+            f = frequencies[i]
+            p = powers[i]
+            if f >= signal[1]:
+                break
+            if f >= signal[0] and f <= signal[1]:
+                signal_power += p
+        signal_power_list.append(signal_power)
+    SNR = sum(signal_power_list)/mean_power
+    return SNR
     
-    biggest_stamp = int(timestamps[len(timestamps)-1]/time_unit)
-    max_time = biggest_stamp + 1
     
-    noise_time, noise_vals = telegraph_noise(max_time, amp, total_fluctuators, start_f, stop_f, time_unit)
-    print("Greatest timestamp is {}\nMax time index in the noise list is {} (both in time_units)".format(biggest_stamp, max_time))
-    
-    for time in timestamps:
-        time_in_timeunits = int(time/time_unit) #finds the time as an integer number of timeunits to use as an index for the noise list
-        noise_at_time = noise_vals[time_in_timeunits]
-        #print("Starting timestamp {:.3f} s".format(time))
-        rho = rho0
-        rho_ideal = rho0
-        for gate in gate_list:
-            if gate == 'Gx':
-                angle = np.pi/2 + noise_at_time
-                angles.append(angle)
-                rho = _qt.to_super(_qt.rx(angle)) * rho
-                rho_ideal = _qt.to_super(_qt.rx(np.pi/2)) * rho_ideal
-            elif gate == 'Gi':
-                angle = noise_at_time
-                angles.append(angle)
-                rho = _qt.to_super(_qt.rx(angle)) * rho
-                rho_ideal = _qt.to_super(_qt.rx(0)) * rho_ideal
-            elif gate == 'Gy':
-                np.pi/2 + noise_at_time
-                angles.append(angle)
-                rho = _qt.to_super(_qt.ry(angle)) * rho
-                rho_ideal = _qt.to_super(_qt.ry(np.pi/2)) * rho_ideal
-            elif gate == 'Gz':
-                np.pi/2 + noise_at_time
-                angles.append(angle)
-                rho = _qt.to_super(_qt.rz(angle)) * rho
-                rho_ideal = _qt.to_super(_qt.rz(np.pi/2)) * rho_ideal
-            
-        #print(rho)
-        #calculate probabilities of being in 1 after the experiment has been applied
-        p1 = (rho.dag()*rho1).norm()
-        p1_ideal = (rho_ideal.dag()*rho1).norm()
-        if p1 >= 1:
-            p1 = 1
-        elif p1<0:
-            p1 = 0
-        #print("*****Time {:.3f}, prob {:.3f}".format(time, p1))
-        probs.append(p1)
-        probs_ideal.append(p1_ideal)
-        one_count = np.random.binomial(nCounts, p1) #simulates a summation of the number of 1-counts you get in one bitstring sample
-        zero_count = nCounts - one_count #simulates summation of the number of 0-counts in one bitstring sample
-        one_counts.append(one_count)
-        zero_counts.append(zero_count)
-   
-    plt.plot(timestamps, probs_ideal, label="Ideal")
-    plt.plot(timestamps, probs, ls='none', marker='.', color="black", label="Noisy")
-    plt.ylim(0,1)
-    plt.xlabel("Time, seconds")
-    plt.ylabel("Probability of Measuring State {1}")
-    plt.title("Simulated {} with 1/f Overrotation Error".format(gate_list_to_string(gate_list)))
-    plt.grid()
-    plt.legend()
-    plt.show()
-        
-    return (np.asarray(one_counts), np.asarray(zero_counts), np.asarray(timestamps), probs)
-
-
 
 def create_data(time_per_count, num_samples, num_counts, gate_list, time_unit, noise_type=None, walking_amp=None, telegraph_amp=None, \
-                res=None, freq_list=None, amp_list=None, phase_list=None, start_f=None, stop_f=None, fluctuators=None, plot_noise=False, add_noise=False):
+                res=None, freq_list=None, amp_list=None, phase_list=None, start_f=None, stop_f=None, fluctuators=None, plot_noise=False, add_noise=False, noise_object=None):
     #time_per_shot: time in seconds for a single (prep-gate-measure+delay)
     #num_samples: how many timestamps and strings of counts you want to have
     #num_counts: how many data points to create (how many ones and zeros) per sample (i.e. per timestamp) --> affects both time of a sample and precision
@@ -171,11 +114,21 @@ def create_data(time_per_count, num_samples, num_counts, gate_list, time_unit, n
     
     sig = 0
     if noise_type == "Sine":
-        sig = _ns.NoiseSignalSine(time_unit=time_unit)
-        sig.configure_noise(resolution_factor=res, freq_list=freq_list, amp_list=amp_list, phase_list=phase_list, total_time=total_time)
-        sig.init()
-        if add_noise != None:  
-            sig.add_random_noise(add_noise) #add normal noise with specified std deviation if requested
+        #this function returns the noise object so you can enter it back in as a parameter
+        # in the event that you call the function repeatedly for a similar set of parameters
+        if noise_object != None:
+            sig = noise_object
+            print("REUSING NOISE OBJECT")
+            while total_time > sig.times[-1] + timestep:
+                sig.next_interval()
+                print("Doing a NEXT INTERVAL")
+        else:
+            print("INITIALIZING NEW NOISE")
+            sig = _ns.NoiseSignalSine(time_unit=time_unit)
+            sig.configure_noise(resolution_factor=res, freq_list=freq_list, amp_list=amp_list, phase_list=phase_list, total_time=total_time)
+            sig.init()
+            if add_noise != None:  
+                sig.add_random_noise(add_noise) #add normal noise with specified std deviation if requested
     elif noise_type == "Random Walk":
         sig = _ns.NoiseSignalRandomWalk(initial_seed=1234, time_unit=time_unit)
         sig.configure_noise(walking_amp, res, total_time)
@@ -189,6 +142,8 @@ def create_data(time_per_count, num_samples, num_counts, gate_list, time_unit, n
     if plot_noise==True:
         sig.plot_noise_signal()
     
+    compressed_gate_list = compress_gate_list(gate_list)
+    
     for time in timestamps:
         noise_at_time = 0
         if noise_type != None:
@@ -196,25 +151,27 @@ def create_data(time_per_count, num_samples, num_counts, gate_list, time_unit, n
             noise_at_time = sig[time/time_unit]
         rho = rho0
         
-        for gate in gate_list:
+        for gate in compressed_gate_list:
+            gate_name = gate[0]
+            gate_repetitions = gate[1]
             '''
             Next step: calculate change in rotation error within each shot. Currently takes the time at the start of the experiment shot
             and applies that to all gates in one shot. Depending on the timescale of the error and time per shot, this simplification may need
             to be addressed so that each gate, say each Gx in (Gx)^11, has an error associated with its specific time, not the same error for
             all 11 Gx gates.
             '''
-            if gate == 'Gx':
+            if gate_name == 'Gx':
                 angle = np.pi/2 + noise_at_time
                 angles.append(angle)
-                rho = _qt.to_super(_qt.rx(angle)) * rho
-            elif gate == 'Gy':
+                rho = (_qt.to_super(_qt.rx(angle)))**gate_repetitions * rho
+            elif gate_name == 'Gy':
                 angle = np.pi/2 + noise_at_time
                 angles.append(angle)
-                rho = _qt.to_super(_qt.ry(angle)) * rho
-            elif gate == 'Gz':
+                rho = (_qt.to_super(_qt.ry(angle)))**gate_repetitions * rho
+            elif gate_name == 'Gz':
                 angle = np.pi/2 + noise_at_time
                 angles.append(angle)
-                rho = _qt.to_super(_qt.rz(angle)) * rho
+                rho = (_qt.to_super(_qt.rz(angle)))**gate_repetitions * rho
         #calculate probabilities of being in 1 after the experiment has been applied
         p1 = (rho.dag()*rho1).norm()
         probs.append(p1)
@@ -232,15 +189,15 @@ def create_data(time_per_count, num_samples, num_counts, gate_list, time_unit, n
         plt.grid()
         plt.show()
         
-    return (np.asarray(one_counts), np.asarray(zero_counts), np.asarray(timestamps), probs)
+    return (np.asarray(one_counts), np.asarray(zero_counts), np.asarray(timestamps), probs, sig)
 
 
 
 if __name__=='__main__':
 
-    gate_list = gate_string_to_list("GxGxGxGxGx")
-    #print(gate_string_to_list("GxGxGxGxGxGxGxGxGxGxGx"))
-    #print(gate_string_to_list("(Gx)^5"))
+    gate_string = "(Gx)^5"
+    gate_list = gate_string_to_list(gate_string)
+    #print(compress_gate_list(gate_list))
     nSamples = 1000  #total samples to take for each measurement
     nCounts = 1      #total shots to take at one; =nSamples: same noise, probabilities for all repeats; =1, new experiment & noise for each count
     time_per_count = 0.016 #seconds
