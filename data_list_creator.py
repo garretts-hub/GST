@@ -9,7 +9,6 @@ import sys
 #sys.path.append("../../transmon-sim/physical_sim")
 sys.path.append("C:/Users/GA28573/AppData/Local/Continuum/anaconda32/Lib/site-packages/qutip-4.3.1-py3.6-win-amd64.egg/qutip")
 
-
 import NoiseSignal2 as _ns
 import qutip as _qt
 import numpy as np

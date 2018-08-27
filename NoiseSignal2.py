@@ -183,8 +183,9 @@ class NoiseSignalSine(NoiseSignal):
         #print(times)
         list_of_point_lists = [0]*len(self.freq_list)
         for i in range(len(self.freq_list)):
-            '''find values for each frequency, then su mthem up later'''
+            '''find values for each frequency, then sum them up later'''
             freq = self.freq_list[i]
+            print(self.amp_list)
             amp = self.amp_list[i]
             phase = self.phase_list[i]
             value_list = []
@@ -240,6 +241,7 @@ class NoiseSignalSine(NoiseSignal):
         #add these lines at the end of the init call
         self.times += times
         self.next_interval_start_time = self.times[-1] + self.step
+        #print("After next interval, end time is {}".format(self.times[-1]))
         
     def plot_noise_signal(self, show_components=True, seconds=False):
         '''Shows a plot of the individual waves, and a plot of the summed wave, if components = True'''
@@ -276,6 +278,7 @@ class NoiseSignalSine(NoiseSignal):
     
     def eval(self, t):
         if t>self.total_time:
+            print("Bad time is {}".format(t))
             raise ValueError("NoiseSignalSine(): Requested time greater than total simulation time")
         if t<0:
             raise ValueError("NoiseSignalSine(): Requested time < 0")
