@@ -185,7 +185,6 @@ class NoiseSignalSine(NoiseSignal):
         for i in range(len(self.freq_list)):
             '''find values for each frequency, then sum them up later'''
             freq = self.freq_list[i]
-            print(self.amp_list)
             amp = self.amp_list[i]
             phase = self.phase_list[i]
             value_list = []
